@@ -1,3 +1,17 @@
+# never commit source imagery or data
+frames/
+data/
+*.jpg
+*.jpeg
+*.png
+*.bmp
+*.mp4
+*.avi
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
 .DS_Store
 Thumbs.db
-node_modules/
