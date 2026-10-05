@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anomaly Detection Mockup</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #273040; --text: #e6edf3;
+    --muted: #9aa5b1; --accent: #58a6ff; --ok: #3fb950; --bad: #f85149;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: var(--bg); }
+  body { font-family: "Segoe UI", Arial, sans-serif; background: var(--bg);
+         color: var(--text); line-height: 1.5; min-height: 100vh; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 28px 20px 64px; }
+  header { display: flex; align-items: center; justify-content: space-between;
+           flex-wrap: wrap; gap: 12px; margin-bottom: 6px; }
+  h1 { font-size: 1.7rem; }
+  .sub { color: var(--muted); margin-bottom: 20px; font-size: 0.98rem; }
+  .status { font-weight: 800; font-size: 1rem; padding: 8px 16px; border-radius: 999px;
+            letter-spacing: 1px; background: var(--ok); color: #04210f; }
+  .status.bad { background: var(--bad); color: #2a0606; }
+
+  .views { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .view { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+          padding: 10px; }
+  .view h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px;
+             color: var(--muted); margin-bottom: 8px; font-weight: 700; }
+  canvas.feed { width: 100%; height: auto; display: block; border-radius: 6px;
+                image-rendering: pixelated; background: #000; }
+
+  .chartwrap { background: var(--panel); border: 1px solid var(--border);
+               border-radius: 10px; padding: 12px; margin-top: 14px; }
+  .chartwrap h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px;
+                  color: var(--muted); margin-bottom: 8px; font-weight: 700; }
+  canvas#chart { width: 100%; height: 150px; display: block; }
+
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+         gap: 12px; margin-top: 14px; }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+          padding: 12px 14px; }
+  .stat .label { color: var(--muted); font-size: 0.78rem; text-transform: uppercase;
+                 letter-spacing: 1px; }
+  .stat .value { font-family: "Consolas", monospace; font-size: 1.4rem; font-weight: 700;
+                 margin-top: 2px; }
+  .stat .value.accent { color: var(--accent); }
+  .stat .value.bad { color: var(--bad); }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center;
+              margin-top: 16px; }
+  button { font: inherit; font-weight: 600; color: #fff; background: #21304a;
+           border: 1px solid var(--border); border-radius: 8px; padding: 9px 16px;
+           cursor: pointer; }
+  button:hover { background: #2b3d5c; }
+  button.primary { background: var(--accent); color: #04121f; border-color: var(--accent); }
+  button.danger  { background: var(--bad); color: #2a0606; border-color: var(--bad); }
+  .slider { display: flex; flex-direction: column; gap: 2px; min-width: 190px; }
+  .slider label { font-size: 0.8rem; color: var(--muted); }
+  .slider .v { font-family: "Consolas", monospace; color: var(--text); }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+
+  .log { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+         padding: 12px 14px; margin-top: 14px; max-height: 150px; overflow-y: auto;
+         font-family: "Consolas", monospace; font-size: 0.85rem; }
+  .log .entry { color: var(--muted); }
+  .log .entry.hit { color: var(--bad); }
+
+  .note { background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+          padding: 14px 18px; margin-top: 20px; color: #c7d0da; font-style: italic;
+          font-size: 0.92rem; }
+  footer { margin-top: 26px; text-align: center; color: var(--muted); font-size: 0.85rem; }
+  footer a { color: var(--accent); }
+  @media (max-width: 680px) { .views { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Anomaly Detection Mockup</h1>
+    <span id="status" class="status">NORMAL</span>
+  </header>
+  <p class="sub">A convolutional autoencoder reconstructs each video frame; a high reconstruction
+     error means the frame does not look like normal data. This is a browser mockup of that pipeline,
+     with a simulated feed and a real per-frame error computed from the pixels.</p>
+
+  <div class="views">
+    <div class="view">
+      <h2>Camera feed</h2>
+      <canvas id="feed" class="feed" width="160" height="120"></canvas>
+    </div>
+    <div class="view">
+      <h2>Reconstruction</h2>
+      <canvas id="recon" class="feed" width="160" height="120"></canvas>
+    </div>
+    <div class="view">
+      <h2>Difference</h2>
+      <canvas id="diff" class="feed" width="160" height="120"></canvas>
+    </div>
+  </div>
+
+  <div class="chartwrap">
+    <h2>Reconstruction error</h2>
+    <canvas id="chart" width="1000" height="150"></canvas>
+  </div>
+
+  <div class="row">
+    <div class="stat"><div class="label">Reconstruction error</div><div id="errVal" class="value accent">--</div></div>
+    <div class="stat"><div class="label">Consecutive over threshold</div><div id="runVal" class="value">0</div></div>
+    <div class="stat"><div class="label">Anomalies detected</div><div id="totalVal" class="value bad">0</div></div>
+  </div>
+
+  <div class="controls">
+    <button id="playBtn" class="primary">Pause</button>
+    <button id="injectBtn">Inject anomaly</button>
+    <button id="resetBtn" class="danger">Reset count</button>
+    <div class="slider">
+      <label>Threshold <span id="thVal" class="v"></span></label>
+      <input id="thresh" type="range" min="0.00005" max="0.0010" step="0.00001" value="0.00029">
+    </div>
+    <div class="slider">
+      <label>Frames to confirm <span id="frVal" class="v"></span></label>
+      <input id="frames" type="range" min="1" max="15" step="1" value="5">
+    </div>
+  </div>
+
+  <div class="log" id="log"></div>
+
+  <p class="note">This is a simulated stand-in for professional work I can't share publicly. It mirrors
+     the real detection logic (autoencoder reconstruction error against a threshold, confirmed over
+     several frames), with a simulated feed in place of the live camera and trained model.</p>
+
+  <footer id="foot"></footer>
+</div>
+
+<script>
+(function () {
+  const OFF_W = 160, OFF_H = 120;               // working resolution
+  const feed = document.getElementById("feed");
+  const recon = document.getElementById("recon");
+  const diff = document.getElementById("diff");
+  const fctx = feed.getContext("2d");
+  const rctx = recon.getContext("2d", { willReadFrequently: true });
+  const dctx = diff.getContext("2d");
+  const ictx = feed.getContext("2d", { willReadFrequently: true });
+
+  const chart = document.getElementById("chart");
+  const cctx = chart.getContext("2d");
+
+  const statusEl = document.getElementById("status");
+  const errVal = document.getElementById("errVal");
+  const runVal = document.getElementById("runVal");
+  const totalVal = document.getElementById("totalVal");
+  const thresh = document.getElementById("thresh");
+  const frames = document.getElementById("frames");
+  const thValLbl = document.getElementById("thVal");
+  const frValLbl = document.getElementById("frVal");
+  const logEl = document.getElementById("log");
+
+  let running = true;
+  let t = 0;
+  let overCount = 0;       // consecutive frames over threshold
+  let total = 0;           // total anomalies reported
+  let anomaly = null;      // active anomaly burst {x, y, r, until}
+  const history = [];      // recent error values for the chart
+  const MAXH = 240;
+
+  function fmt(e) { return e.toExponential(2); }
+
+  // Draw the "normal" scene (shared content both views agree on).
+  function drawScene(ctx) {
+    const g = ctx.createLinearGradient(0, 0, 0, OFF_H);
+    g.addColorStop(0, "#24324a");
+    g.addColorStop(1, "#0f1626");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, OFF_W, OFF_H);
+    // drifting soft lighting bands, so the feed looks alive
+    for (let i = 0; i < 3; i++) {
+      const x = OFF_W * (0.5 + 0.4 * Math.sin(t / 22 + i * 2));
+      const y = OFF_H * (0.5 + 0.35 * Math.cos(t / 28 + i));
+      const rad = ctx.createRadialGradient(x, y, 4, x, y, 42);
+      rad.addColorStop(0, "rgba(120,150,200,0.22)");
+      rad.addColorStop(1, "rgba(120,150,200,0)");
+      ctx.fillStyle = rad;
+      ctx.fillRect(0, 0, OFF_W, OFF_H);
+    }
+    // a steady "part" in view
+    ctx.strokeStyle = "rgba(180,200,230,0.25)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(OFF_W * 0.3, OFF_H * 0.28, OFF_W * 0.4, OFF_H * 0.44);
+  }
+
+  function render() {
+    // Camera feed = normal scene + anomaly (if active).
+    drawScene(ictx);
+    if (anomaly && t < anomaly.until) {
+      const grd = ictx.createRadialGradient(anomaly.x, anomaly.y, 2, anomaly.x, anomaly.y, anomaly.r);
+      grd.addColorStop(0, "rgba(255,120,90,0.95)");
+      grd.addColorStop(1, "rgba(255,120,90,0)");
+      ictx.fillStyle = grd;
+      ictx.beginPath();
+      ictx.arc(anomaly.x, anomaly.y, anomaly.r, 0, Math.PI * 2);
+      ictx.fill();
+    }
+
+    // Reconstruction = autoencoder output: the normal scene, slightly blurred,
+    // never containing the anomaly (it was never trained on it).
+    rctx.filter = "blur(2px)";
+    drawScene(rctx);
+    rctx.filter = "none";
+
+    // Compute MSE between feed and reconstruction (grayscale, normalized).
+    const a = ictx.getImageData(0, 0, OFF_W, OFF_H).data;
+    const b = rctx.getImageData(0, 0, OFF_W, OFF_H).data;
+    const dimg = dctx.createImageData(OFF_W, OFF_H);
+    let sum = 0;
+    const n = OFF_W * OFF_H;
+    for (let i = 0; i < n; i++) {
+      const j = i * 4;
+      const ga = (a[j] * 0.299 + a[j + 1] * 0.587 + a[j + 2] * 0.114) / 255;
+      const gb = (b[j] * 0.299 + b[j + 1] * 0.587 + b[j + 2] * 0.114) / 255;
+      const d = ga - gb;
+      sum += d * d;
+      const v = Math.min(255, Math.abs(d) * 900);   // brighten the diff view
+      dimg.data[j] = v; dimg.data[j + 1] = v * 0.4; dimg.data[j + 2] = v * 0.2;
+      dimg.data[j + 3] = 255;
+    }
+    dctx.putImageData(dimg, 0, 0);
+    return sum / n;   // mean squared error
+  }
+
+  function pushLog(text, hit) {
+    const div = document.createElement("div");
+    div.className = "entry" + (hit ? " hit" : "");
+    div.textContent = text;
+    logEl.prepend(div);
+    while (logEl.childElementCount > 40) logEl.removeChild(logEl.lastChild);
+  }
+
+  function drawChart() {
+    const W = chart.width, H = chart.height;
+    cctx.clearRect(0, 0, W, H);
+    const th = parseFloat(thresh.value);
+    const peak = Math.max(th * 1.6, ...history, 1e-9);
+    const y = e => H - 6 - (e / peak) * (H - 12);
+    // threshold line
+    cctx.strokeStyle = "#f85149"; cctx.setLineDash([5, 4]); cctx.lineWidth = 1;
+    cctx.beginPath(); cctx.moveTo(0, y(th)); cctx.lineTo(W, y(th)); cctx.stroke();
+    cctx.setLineDash([]);
+    // error trace
+    cctx.strokeStyle = "#58a6ff"; cctx.lineWidth = 2; cctx.beginPath();
+    history.forEach((e, i) => {
+      const x = (i / (MAXH - 1)) * W;
+      i ? cctx.lineTo(x, y(e)) : cctx.moveTo(x, y(e));
+    });
+    cctx.stroke();
+  }
+
+  const shotMode = new URLSearchParams(location.search).has("shot");
+
+  function tick() {
+    if (!running) return;
+    t++;
+    // random spontaneous anomaly now and then
+    if (!anomaly && Math.random() < 0.012) spawnAnomaly();
+    if (anomaly && t >= anomaly.until) anomaly = null;
+    // keep one on screen for a static capture
+    if (shotMode && !anomaly) spawnAnomaly();
+
+    const err = render();
+    history.push(err);
+    if (history.length > MAXH) history.shift();
+    drawChart();
+
+    const th = parseFloat(thresh.value);
+    const need = parseInt(frames.value, 10);
+    if (err > th) overCount++; else overCount = 0;
+
+    let hit = false;
+    if (overCount >= need) {
+      total++;
+      overCount = 0;
+      hit = true;
+      pushLog(`[frame ${t}] ANOMALY DETECTED  (error ${fmt(err)})  total ${total}`, true);
+    }
+
+    errVal.textContent = fmt(err);
+    errVal.className = "value " + (err > th ? "bad" : "accent");
+    runVal.textContent = overCount;
+    totalVal.textContent = total;
+    const active = err > th;
+    statusEl.textContent = active ? "ANOMALY" : "NORMAL";
+    statusEl.className = "status" + (active ? " bad" : "");
+    if (hit) { /* already logged */ }
+  }
+
+  function spawnAnomaly() {
+    anomaly = {
+      x: OFF_W * (0.25 + Math.random() * 0.5),
+      y: OFF_H * (0.25 + Math.random() * 0.5),
+      r: 14 + Math.random() * 12,
+      until: t + 8 + Math.floor(Math.random() * 8),
+    };
+  }
+
+  // controls
+  document.getElementById("playBtn").addEventListener("click", e => {
+    running = !running;
+    e.target.textContent = running ? "Pause" : "Play";
+  });
+  document.getElementById("injectBtn").addEventListener("click", () => {
+    spawnAnomaly();
+    pushLog(`[frame ${t}] anomaly injected`);
+  });
+  document.getElementById("resetBtn").addEventListener("click", () => {
+    total = 0; overCount = 0; totalVal.textContent = 0;
+    pushLog(`[frame ${t}] count reset`);
+  });
+  function syncLabels() {
+    thValLbl.textContent = parseFloat(thresh.value).toExponential(2);
+    frValLbl.textContent = frames.value;
+  }
+  thresh.addEventListener("input", syncLabels);
+  frames.addEventListener("input", syncLabels);
+  syncLabels();
+
+  // GitHub link in footer, when served from Pages
+  (function () {
+    const host = location.hostname, path = location.pathname.split("/").filter(Boolean);
+    if (host.endsWith("github.io") && path.length) {
+      document.getElementById("foot").innerHTML =
+        '<a href="https://github.com/' + host.split(".")[0] + "/" + path[0] + '">View the code on GitHub</a>';
+    }
+  })();
+
+  setInterval(tick, 80);   // ~12 fps detection loop
+})();
+</script>
+</body>
+</html>
